@@ -3,179 +3,199 @@ name: figma-hifi-frontend
 description: 将 Figma 设计稿高保真还原为目标项目当前技术栈的前端代码。适用于 Figma MCP 读稿、稿转代码、像素级还原、截图对比、pixel diff、移动端或桌面端页面实现。必须先识别项目技术栈与样式体系，再按项目既有规范实现；不得预设 React、Tailwind 或任何特定框架。
 ---
 
-# Figma 高保真前端还原
+# Figma Hifi Frontend
 
-## 适用场景
+将这个 skill 当成一个“可执行协议”，不是泛化建议集。
 
-只要任务涉及 Figma URL、Figma MCP、设计稿实现、高保真还原、截图对比、pixel diff、设计 token、静态资源提取，就必须使用本 Skill。
+## When To Use
 
-## 一次性高保真流水线
+以下场景必须使用本 Skill：
 
-处理任意 Figma 链接时，按六层流水线执行：
+- Figma URL / `fileKey` / `nodeId`
+- 稿转代码、设计稿实现、高保真还原
+- pixel diff、截图对比、视觉验收
+- 资源导出、设计合同、分区 diff
 
-1. 数据获取层：解析 `fileKey`、`nodeId`，识别项目技术栈；用 MCP 获取结构、metadata、variables、设计上下文；用 Figma REST API 获取可落盘 `design.png`。
-2. 设计合同层：保存 raw 后调用 `scripts/figma-build-contract.mjs`，生成非空 `node-index.json`、`sections.json`、`layout-contract.md`、`assets-index.json`、`manifest-patch.json`。
-3. 实现策略层：按节点复杂度选择 DOM / SVG / 图片化 / 数据绑定 / 忽略策略，复杂静态资源调用 `scripts/figma-export-assets.mjs` 导出，详见 `reference-implementation-strategy.md`。
-4. 自动截图层：本地运行页面，使用 Playwright 截取稳定的 `local.png`，隐藏调试浮层并等待字体和图片加载。
-5. Pixel Diff 层：调用 `scripts/figma-pixel-diff.mjs` 生成 `diff.png`、分区 diff、`pixel-diff-report.json` 和 `pixel-diff-summary.md`。
-6. 自动收敛层：根据 section diff 有序修正，最多自动迭代 2 轮；仍未收敛时停止并报告残余差异。
+以下场景不应强行使用：
+
+- 没有 Figma 输入的普通页面搭建
+- 纯交互逻辑开发或接口联调优先任务
+- 只做低保真结构草搭
+- 用户明确不需要视觉验收或设计一致性
+
+## Inputs
+
+开始前先确认：
+
+- Figma 输入：URL、`fileKey`、`nodeId`
+- 目标项目事实：框架、语言、样式体系、路由和目录约定
+- 是否强制刷新缓存
+- 是否要求高保真 / 像素级 / 截图对比
+- 是否需要导出真实 PNG/SVG 资源
 
 硬规则：
 
-- 没有可落盘 REST 设计图，不宣称完成 pixel diff。
-- 没有 `layout-contract.md`、非空 `sections.json`、`assets-index.json`、`screenshots/design.png`，不开始编码。
-- `get_design_context` 返回的代码只作设计表达参考，不能直接复制成最终实现。
-- 复杂静态视觉允许图片化，不为了“纯 DOM”牺牲高保真。
-- 整页 diff 只作总览，收敛优先看 section diff。
-- strict diff 用于定位，practical diff 用于验收。
-- `pixel-diff-report.json` 里 `sections` 为空时，不宣称完成验收；先重建合同或显式使用 `--band-diff` 做诊断。
-- diff 超过阈值时，不宣称“高保真完成”，必须报告最高差异 section 和下一轮修复策略。
+- `clientLanguages`、`clientFrameworks` 必须来自项目事实，不得猜测。
+- 不得因为 Figma 返回 Tailwind 片段就新增 Tailwind 或其他框架依赖。
+- `get_design_context` 只作设计表达参考，不能直接复制为最终实现。
 
-六层能力的文件落点见 `reference-workflow-layers.md`。
+## Quick Start
 
-## 数据获取与缓存
+最小成功路径：
 
-优先从 Figma URL 解析：
+1. 解析 Figma URL，得到 `fileKey`、`nodeId`。
+2. 识别目标项目技术栈与样式体系。
+3. 获取并缓存 raw Figma 数据。
+4. 运行 `scripts/figma-build-contract.mjs` 生成合同产物。
+5. 根据合同决定 DOM、组件、SVG、图片化、fixture 或忽略策略。
+6. 需要高保真验收时，运行 `scripts/figma-pixel-diff.mjs`。
+7. 依据 section diff 收敛，最多自动修正 2 轮。
+8. 最终回复只依据可验证证据，不做口头宣称。
 
-- `fileKey`：`/design/:fileKey/`
-- `nodeId`：`node-id=1-2`，调用工具时规范化为 `1:2`
+## Required Artifacts
 
-读取顺序：
+开始编码前至少应具备：
 
-1. 判断是否强制刷新。触发词包括：`强制请求`、`不使用缓存`、`忽略缓存`、`重新拉取 Figma`、`force refresh`、`no cache`。
-2. 未强制刷新时，先检查 `<cache-root>/<fileKey>/<nodeId>/manifest.json` 和 raw/summaries。
-3. 缓存缺失时调用 MCP：`get_design_context`、必要时 `get_metadata`、`get_variable_defs`、`get_screenshot`、`search_design_system`。
-4. 保存 raw 后立即生成或更新 summaries；`sections.json` 为空视为合同失败。
-5. 需要 pixel diff 时，使用 Figma REST API 导出可落盘 `screenshots/design.png`。
-6. 需要真实图片/SVG 时，根据 `assets-index.json` 调用资源导出脚本。
+- `summaries/layout-contract.md`
+- 非空 `summaries/sections.json`
+- `summaries/assets-index.json`
 
-推荐缓存结构：
+宣称完成 pixel diff 前至少应具备：
 
-```text
-<cache-root>/<fileKey>/<nodeId-normalized>/
-  manifest.json
-  raw/
-    get_design_context.json
-    get_metadata.xml
-    get_variable_defs.json
-  summaries/
-    node-index.json
-    sections.json
-    layout-contract.md
-    tokens.json
-    assets-index.json
-    pixel-diff-report.json
-    pixel-diff-summary.md
-  screenshots/
-    design.png
-    local.png
-    diff.png
-    sections/
-  assets/
-    exported-assets.json
-```
+- `screenshots/design.png`
+- `screenshots/local.png`
+- `summaries/pixel-diff-report.json`
+- `summaries/pixel-diff-summary.md`
 
-首次需要缓存且没有已配置缓存根目录时，向用户选择：项目内共享 `docs/references/figma/cache/`、项目内本地 `.figma-cache/`、用户目录 `~/.cache/figma-mcp/` 或自定义路径。
+高保真验收必须满足：
 
-## 目标项目适配
+- 有 section diff；若 `pixel-diff-report.json.sections` 为空，则验收无效。
+- 没有 REST 导出的 `design.png`，不能宣称完成视觉对比。
+- `--band-diff` 仅用于诊断，不能作为最终验收依据。
 
-编码前必须识别目标项目：
+## Workflow
 
-- 框架：React / Vue / Next / Nuxt / 原生 H5 / 小程序 / 其他
-- 语言：TypeScript / JavaScript / Vue SFC / HTML / CSS / SCSS / Less 等
-- 样式体系：SCSS、CSS Modules、Tailwind、Less、styled-components、组件库主题、全局 CSS 等
-- 路由、状态、资源、构建和目录约定
+### 1. Fetch
 
-Figma MCP 调用里的 `clientLanguages`、`clientFrameworks` 必须来自项目事实；不确定时填 `unknown`。未经用户明确同意，不得因为 MCP 返回 Tailwind 片段就新增 Tailwind 或其他框架依赖。
+- 先判断是否强制刷新缓存。
+- 未强制刷新时优先读取已有缓存。
+- 缓存缺失时，再调用 MCP / REST 获取数据。
+- 需要真实视觉基线时，必须拿到可落盘 `design.png`。
 
-## 设计合同
+缓存结构、命令参数和目录示例见：
 
-实现前必须有 `summaries/layout-contract.md`。如果已有 metadata/raw，优先执行：
+- `reference-workflow-layers.md`
+- `reference-contract-generation.md`
+- `reference-pixel-diff.md`
 
-```bash
-node ~/.agents/skills/figma-hifi-frontend/scripts/figma-build-contract.mjs \
-  --file-key <figma-file-key> \
-  --node-id <figma-node-id> \
-  --metadata <metadata-xml-or-json> \
-  --cache-root <figma-cache-root> \
-  --figma-url <figma-url>
-```
+### 2. Contract
 
-合同生成工具的完整说明见 `reference-contract-generation.md`。
+先生成设计合同，再开始实现。
 
-生成后必须检查：
+- 运行 `scripts/figma-build-contract.mjs`
+- 检查 `sections.json` 非空
+- 检查 `layout-contract.md` 不是大量 `TBD`
+- 检查 `assets-index.json` 是否覆盖复杂静态视觉
 
-- `summaries/sections.json` 非空，坐标单位为 CSS px。
-- `summaries/assets-index.json` 覆盖车图、头像、趋势图、营销卡、复杂保障卡等静态视觉节点。
-- `summaries/layout-contract.md` 包含关键布局、资源清单、文本节点和样式线索；大量 `TBD` 时先补 raw/metadata，不直接编码。
+### 3. Implementation
 
-## 实现策略
+实现策略只允许来自合同和项目事实：
 
-实现策略必须记录在 `layout-contract.md` 或 `assets-index.json` 中：
+- 文本、简单布局、按钮、卡片：优先 DOM / 组件
+- 图标、简单 vector：优先 SVG
+- 复杂渐变、营销卡、静态图表、照片、截图式区域：优先图片化
+- 业务数据：使用稳定 fixture 或真实数据绑定
+- 标注层、隐藏层、实验层：忽略
 
-- `semantic-dom`：文本、普通布局、简单卡片、按钮。
-- `component-dom`：重复卡片、tabs、表单、交互控件。
-- `svg-asset`：icon、logo、简单 vector。
-- `image-asset`：复杂静态图表、营销卡、多层渐变、截图式设计。
-- `data-bound`：商品图、头像、价格、列表内容等业务数据。
-- `ignore`：隐藏层、实验层、标注层、不可见节点。
+详细判定表见 `reference-implementation-strategy.md`。
 
-车图、头像、营销卡、复杂图表、复杂渐变、截图式区域默认进入 asset 流程；只有文本、简单卡片、按钮、列表骨架优先 DOM。
+### 4. Diff
 
-导出资源默认命令：
+用户要求“像素级 / 1:1 / 截图对比 / 高保真”时，默认必须跑 pixel diff。
 
-```bash
-node ~/.agents/skills/figma-hifi-frontend/scripts/figma-export-assets.mjs \
-  --file-key <figma-file-key> \
-  --node-id <figma-node-id> \
-  --cache-root <figma-cache-root> \
-  --scale 2
-```
+`scripts/figma-pixel-diff.mjs` 支持两种语义：
 
-详细规则见 `reference-implementation-strategy.md`。
+- `strict`：定位问题
+- `practical`：做验收判断
 
-## 视觉验收
+默认行为：
 
-用户要求高保真、像素级、1:1、截图对比或 pixel diff 时，默认执行自动视觉验收；除非用户明确要求跳过。
+- 未显式传阈值时，默认输出 `strict + practical`
+- 传 legacy `--threshold` / `--max-diff-ratio` 时，兼容到单一 `practical` 模式
 
-默认命令：
+### 5. Converge
 
-```bash
-node ~/.agents/skills/figma-hifi-frontend/scripts/figma-pixel-diff.mjs \
-  --file-key <figma-file-key> \
-  --node-id <figma-node-id> \
-  --url <local-page-url> \
-  --cache-root <figma-cache-root> \
-  --viewport-width <design-width> \
-  --compare-mode design-bounds \
-  --sections-json <cache-root>/<file-key>/<node-id>/summaries/sections.json \
-  --scale 2
-```
+修复顺序固定为：
 
-脚本需要 `FIGMA_TOKEN`，且 token 必须能读取目标 Figma 文件。缺少 token 或权限不足时，明确说明无法自动获取设计基线，不要退回手动导出图片。
+1. 页面尺寸、背景、安全区、字体
+2. section 的 top、height、padding、gap
+3. 简单 DOM 区块内部细节
+4. 高 diff 的复杂静态区块切换为图片或 SVG
+5. 重新运行 section diff
 
-默认使用 `--compare-mode design-bounds`，避免本地页面额外空白污染 diff。诊断整页滚动高度时用 `full-page`，只看首屏时用 `viewport`。默认必须生成 section diff；脚本会自动查找 `summaries/sections.json`，也可以显式传入 `--sections-json`。只有诊断无法生成 section 的坏数据时，才显式传 `--band-diff` 生成横向 band fallback。
+停止条件：
 
-详细参数见 `reference-pixel-diff.md`。
+- `practical` 通过
+- 连续两轮改善不足
+- 差异主要来自字体、抗锯齿、动态数据、Figma 与浏览器渲染差异
 
-## 收敛规则
+## Decision Rules
 
-按以下顺序修正：
+- 用户只说“实现页面”但没要求高保真：仍先走合同层，pixel diff 按需启用。
+- 用户明确要像素级或 1:1：pixel diff 默认必跑。
+- 没有 section diff、没有设计基线、没有可验证证据：禁止说“高保真完成”。
+- 整页 diff 只作总览；收敛优先看 section diff。
+- 一轮修复后高 diff 仍来自复杂静态视觉：切换 asset，不继续手搓近似 CSS。
 
-1. 页面尺寸、背景、安全区、全局字体。
-2. section top、height、padding、gap。
-3. 简单 DOM 区块内部细节。
-4. 高 diff 的复杂静态区块切换为 image/SVG asset。
-5. 重新运行 section diff。
+## Failure Conditions
 
-最多自动修正 2 轮。若 practical diff 通过、连续两轮改善不足，或差异来自字体渲染、动态数据、浏览器抗锯齿、Figma/browser 渲染差异，则停止并报告原因。
+遇到以下情况必须停止并明确说明：
 
-## 最终回复证据
+- 无法识别目标项目技术栈
+- 缺少可用 metadata 或目标节点 bounds
+- `sections.json` 为空
+- 缺少 `FIGMA_TOKEN` 且需要 REST 导图或资源导出
+- 缺少 Playwright 或本地页面无法稳定截图
+- 报告里没有可验证的 section 级结果
+
+## Evidence
 
 最终回复必须说明：
 
 - 使用的 Skill：`figma-hifi-frontend`
 - Figma 数据来源：缓存 / 新拉取 / 强制刷新
-- 关键产物路径：`manifest.json`、`layout-contract.md`、`design.png`、`local.png`、`diff.png`、`pixel-diff-report.json`
+- 是否进行了像素验收，使用了哪些 preset
+- 关键产物路径：`layout-contract.md`、`design.png`、`local.png`、`pixel-diff-report.json`
+- 最高差异 section、已图片化区域、未收敛原因、残余风险
 - 实际执行的验证命令
-- 全局 diff 结果、最高差异 section、已修正内容、已图片化区域、未收敛原因、残余风险和下一步建议
+
+## Source Of Truth
+
+单一事实源原则：
+
+- CLI 参数、报告字段、产物路径，以脚本真实实现为准
+- `SKILL.md` 只描述流程、规则和停止条件
+- 详细参数和数据契约看 reference 文件
+- reference 不得描述脚本未实现的能力
+
+## Maintenance
+
+推荐维护入口：
+
+- `npm run validate`：本地主验证链路，包含静态契约校验和 smoke 检查
+- `npm run smoke`：只运行 fixture 和 profile 语义检查
+
+外部工具链说明：
+
+- `skill-creator` 的 `quick_validate.py` 只作为可选兼容检查
+- 该外部脚本依赖 `PyYAML`
+- 没有 `PyYAML` 时，不影响本仓库的日常维护和发布前校验
+
+## References
+
+- `reference-workflow-layers.md`：六层流水线与缓存落点
+- `reference-contract-generation.md`：合同脚本契约与失败条件
+- `reference-implementation-strategy.md`：节点分类和实现策略
+- `reference-pixel-diff.md`：pixel diff 参数、preset、报告契约与诊断边界
+- `scripts/smoke-check.mjs`：最小 smoke checklist
+- `scripts/validate-skill.mjs`：本地主验证入口

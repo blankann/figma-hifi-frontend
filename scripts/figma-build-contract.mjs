@@ -3,6 +3,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
+import { fileURLToPath } from "node:url";
 
 const usage = `用法：
   figma-build-contract.mjs --file-key <key> --node-id <id> --metadata <path> [选项]
@@ -10,7 +11,7 @@ const usage = `用法：
 必填：
   --file-key <key>        Figma 文件 key
   --node-id <id>          Figma 节点 id，例如 50:929 或 50-929
-  --metadata <path>       MCP metadata XML、Figma REST JSON 或提取后的节点 JSON
+  --metadata <path>       元数据文件。支持：提取后的节点 JSON、Figma REST JSON、MCP metadata XML
 
 选项：
   --cache-root <path>     默认：~/.cache/figma-mcp
@@ -223,6 +224,17 @@ function parseJsonMetadata(text, targetNodeId) {
     json;
 
   return normalizeNode(candidate);
+}
+
+function detectMetadataSource(text, targetNodeId) {
+  const trimmed = text.trim();
+  if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+    const json = JSON.parse(trimmed);
+    if (json.nodes?.[targetNodeId]?.document) return "figma-rest-json";
+    if (json.document) return "figma-rest-json";
+    return "node-json";
+  }
+  return "mcp-metadata-xml";
 }
 
 function decodeXml(value = "") {
@@ -581,6 +593,8 @@ async function main() {
   const summariesDir = path.join(nodeDir, "summaries");
   const rawDir = path.join(nodeDir, "raw");
   const metadataPath = path.resolve(expandHome(args.metadata));
+  const metadataRaw = await fs.readFile(metadataPath, "utf8");
+  const metadataSource = detectMetadataSource(metadataRaw, args.nodeId);
 
   await fs.mkdir(summariesDir, { recursive: true });
   await fs.mkdir(rawDir, { recursive: true });
@@ -597,6 +611,7 @@ async function main() {
     nodeId: args.nodeId,
     targetName: args.targetName || target.name,
     targetType: target.type,
+    metadataSource,
     designWidth: args.designWidth || target.bounds?.width,
     designHeight: args.designHeight || target.bounds?.height,
     updatedAt: new Date().toISOString(),
@@ -622,6 +637,7 @@ async function main() {
       type: target.type,
       bounds: target.bounds,
     },
+    metadataSource,
     artifacts: {
       nodeIndex: path.join(summariesDir, "node-index.json"),
       sections: path.join(summariesDir, "sections.json"),
@@ -637,10 +653,20 @@ async function main() {
   }, null, 2));
 }
 
-main().catch((error) => {
-  console.error(JSON.stringify({
-    ok: false,
-    error: error.message,
-  }, null, 2));
-  process.exitCode = 1;
-});
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((error) => {
+    console.error(JSON.stringify({
+      ok: false,
+      error: error.message,
+    }, null, 2));
+    process.exitCode = 1;
+  });
+}
+
+export {
+  buildAssets,
+  chooseSections,
+  detectMetadataSource,
+  loadMetadata,
+  pickTargetNode,
+};

@@ -2,6 +2,10 @@
   "name": "figma-hifi-frontend-skill",
   "private": true,
   "type": "module",
+  "scripts": {
+    "smoke": "node scripts/smoke-check.mjs",
+    "validate": "node scripts/validate-skill.mjs"
+  },
   "dependencies": {
     "pixelmatch": "^7.1.0",
     "pngjs": "^7.0.0"

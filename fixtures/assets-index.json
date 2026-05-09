@@ -1,0 +1,20 @@
+[
+  {
+    "figmaNode": "Vehicle Photo",
+    "nodeId": "1:21",
+    "type": "image-asset",
+    "targetFile": "assets/vehicle-photo.png"
+  },
+  {
+    "figmaNode": "Back Icon",
+    "nodeId": "1:11",
+    "type": "svg-asset",
+    "targetFile": "assets/back-icon.svg"
+  },
+  {
+    "figmaNode": "Title",
+    "nodeId": "1:12",
+    "type": "semantic-dom",
+    "targetFile": "assets/title.txt"
+  }
+]

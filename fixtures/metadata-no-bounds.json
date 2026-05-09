@@ -1,0 +1,14 @@
+{
+  "document": {
+    "id": "9:9",
+    "name": "Broken Frame",
+    "type": "FRAME",
+    "children": [
+      {
+        "id": "9:10",
+        "name": "Only Child",
+        "type": "FRAME"
+      }
+    ]
+  }
+}

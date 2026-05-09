@@ -1,0 +1,67 @@
+{
+  "document": {
+    "id": "1:2",
+    "name": "Valuation Result",
+    "type": "FRAME",
+    "absoluteBoundingBox": { "x": 0, "y": 0, "width": 375, "height": 812 },
+    "children": [
+      {
+        "id": "1:10",
+        "name": "Header",
+        "type": "FRAME",
+        "absoluteBoundingBox": { "x": 0, "y": 0, "width": 375, "height": 88 },
+        "children": [
+          {
+            "id": "1:11",
+            "name": "Back Icon",
+            "type": "VECTOR",
+            "absoluteBoundingBox": { "x": 16, "y": 30, "width": 24, "height": 24 }
+          },
+          {
+            "id": "1:12",
+            "name": "Title",
+            "type": "TEXT",
+            "characters": "估价结果",
+            "absoluteBoundingBox": { "x": 150, "y": 28, "width": 80, "height": 28 },
+            "style": {
+              "fontFamily": "PingFang SC",
+              "fontSize": 20,
+              "fontWeight": 600,
+              "lineHeightPx": 28
+            }
+          }
+        ]
+      },
+      {
+        "id": "1:20",
+        "name": "Hero",
+        "type": "FRAME",
+        "absoluteBoundingBox": { "x": 0, "y": 88, "width": 375, "height": 220 },
+        "children": [
+          {
+            "id": "1:21",
+            "name": "Vehicle Photo",
+            "type": "RECTANGLE",
+            "absoluteBoundingBox": { "x": 24, "y": 112, "width": 327, "height": 160 },
+            "fills": [{ "type": "IMAGE", "imageRef": "vehicle-ref" }]
+          }
+        ]
+      },
+      {
+        "id": "1:30",
+        "name": "Trend Chart",
+        "type": "FRAME",
+        "absoluteBoundingBox": { "x": 0, "y": 320, "width": 375, "height": 180 },
+        "children": [
+          {
+            "id": "1:31",
+            "name": "Price Trend",
+            "type": "GROUP",
+            "absoluteBoundingBox": { "x": 24, "y": 340, "width": 327, "height": 132 },
+            "effects": [{ "type": "DROP_SHADOW" }]
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -3,6 +3,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
+import { fileURLToPath } from "node:url";
 
 const usage = `用法：
   figma-export-assets.mjs --file-key <key> --node-id <id> [选项]
@@ -142,6 +143,28 @@ function resolveAssetPath(asset, outDir) {
   return path.join(outDir, basename);
 }
 
+function buildExportPlan(assets, outDir) {
+  if (!Array.isArray(assets) || assets.length === 0) {
+    throw new Error("assets-index has no exportable assets");
+  }
+
+  const typedAssets = assets.filter((asset) => ["image-asset", "svg-asset"].includes(asset?.type));
+  if (typedAssets.length === 0) {
+    throw new Error("assets-index contains no image-asset/svg-asset entries");
+  }
+
+  const missingNodeIds = typedAssets.filter((asset) => !asset?.nodeId);
+  if (missingNodeIds.length > 0) {
+    throw new Error(`assets-index has exportable entries without nodeId: ${missingNodeIds.map((asset) => asset.figmaNode || asset.targetFile || asset.type).join(", ")}`);
+  }
+
+  return typedAssets.map((asset) => ({
+    ...asset,
+    format: assetFormat(asset),
+    outputPath: resolveAssetPath(asset, outDir),
+  }));
+}
+
 async function exportAsset(args, asset, outPath) {
   const format = assetFormat(asset);
   const query = new URLSearchParams({
@@ -190,22 +213,14 @@ async function main() {
   await fs.mkdir(outDir, { recursive: true });
 
   const assets = JSON.parse(await fs.readFile(assetsIndexPath, "utf8"));
-  if (!Array.isArray(assets) || assets.length === 0) {
-    throw new Error(`assets-index has no exportable assets: ${assetsIndexPath}`);
-  }
-
-  const exportable = assets.filter((asset) => asset?.nodeId && ["image-asset", "svg-asset"].includes(asset.type));
-  if (exportable.length === 0) {
-    throw new Error(`assets-index contains no image-asset/svg-asset entries: ${assetsIndexPath}`);
-  }
+  const exportable = buildExportPlan(assets, outDir);
 
   const exported = [];
   const failed = [];
 
   for (const asset of exportable) {
-    const outputPath = resolveAssetPath(asset, outDir);
     try {
-      exported.push(await exportAsset(args, asset, outputPath));
+      exported.push(await exportAsset(args, asset, asset.outputPath));
     } catch (error) {
       failed.push({
         figmaNode: asset.figmaNode,
@@ -241,13 +256,22 @@ async function main() {
   }, null, 2));
 }
 
-main().catch((error) => {
-  console.error(JSON.stringify({
-    ok: false,
-    error: error.message,
-    hint: error.message.includes("FIGMA_TOKEN")
-      ? "Set FIGMA_TOKEN with read access to the Figma file, then rerun the script."
-      : undefined,
-  }, null, 2));
-  process.exitCode = 1;
-});
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((error) => {
+    console.error(JSON.stringify({
+      ok: false,
+      error: error.message,
+      hint: error.message.includes("FIGMA_TOKEN")
+        ? "Set FIGMA_TOKEN with read access to the Figma file, then rerun the script."
+        : undefined,
+    }, null, 2));
+    process.exitCode = 1;
+  });
+}
+
+export {
+  assetFormat,
+  buildExportPlan,
+  defaultFilename,
+  resolveAssetPath,
+};

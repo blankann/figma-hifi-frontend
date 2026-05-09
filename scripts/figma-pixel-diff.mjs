@@ -10,31 +10,47 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const skillRoot = path.resolve(__dirname, "..");
 
+const PROFILE_PRESETS = Object.freeze({
+  strict: Object.freeze({
+    name: "strict",
+    label: "定位视角",
+    threshold: 0.05,
+    maxDiffRatio: 0.005,
+  }),
+  practical: Object.freeze({
+    name: "practical",
+    label: "验收视角",
+    threshold: 0.1,
+    maxDiffRatio: 0.02,
+  }),
+});
+
 const usage = `用法：
   figma-pixel-diff.mjs --file-key <key> --node-id <id> --url <local-url> [选项]
 
 必填：
-  --file-key <key>        Figma 文件 key
-  --node-id <id>          Figma 节点 id，例如 50:929 或 50-929
-  --url <url>             本地页面 URL
-  FIGMA_TOKEN             可读取该 Figma 文件的 personal access token
+  --file-key <key>          Figma 文件 key
+  --node-id <id>            Figma 节点 id，例如 50:929 或 50-929
+  --url <url>               本地页面 URL
+  FIGMA_TOKEN               可读取该 Figma 文件的 personal access token
 
 选项：
-  --cache-root <path>     默认：~/.cache/figma-mcp
-  --viewport-width <px>   默认：375
-  --viewport-height <px>  CSS px。默认：design image height / scale，再回退 812
-  --scale <n>             Figma 导出倍率和浏览器 deviceScaleFactor。默认：2
-  --compare-mode <mode>   design-bounds | full-page | viewport。默认：design-bounds
-  --threshold <n>         pixelmatch 阈值。默认：0.1
-  --max-diff-ratio <n>    通过阈值。默认：0.02
-  --background <hex>      透明或短图补底色。默认：#f5f6f7
-  --hide-selector <css>   截图前隐藏的 CSS selector，可重复传入
-  --sections-json <path>  分区 bounds JSON；默认自动读取 summaries/sections.json
-  --section-unit <unit>   css | pixel。默认：css
-  --band-diff             section 缺失时显式启用横向 band fallback
-  --band-height <px>      band fallback 高度，CSS px。默认：125
-  --wait-ms <ms>          截图前额外等待时间。默认：500
-  --help                  显示帮助
+  --cache-root <path>       默认：~/.cache/figma-mcp
+  --viewport-width <px>     默认：375
+  --viewport-height <px>    CSS px。默认：design image height / scale，再回退 812
+  --scale <n>               Figma 导出倍率和浏览器 deviceScaleFactor。默认：2
+  --compare-mode <mode>     design-bounds | full-page | viewport。默认：design-bounds
+  --preset <mode>           strict | practical | both。默认：未指定阈值时 both；传 legacy 阈值时兼容 practical
+  --threshold <n>           legacy 阈值覆盖；仅单 preset 模式使用
+  --max-diff-ratio <n>      legacy 通过阈值覆盖；仅单 preset 模式使用
+  --background <hex>        透明或短图补底色。默认：#f5f6f7
+  --hide-selector <css>     截图前隐藏的 CSS selector，可重复传入
+  --sections-json <path>    分区 bounds JSON；默认自动读取 summaries/sections.json
+  --section-unit <unit>     css | pixel。默认：css
+  --band-diff               section 缺失时显式启用横向 band fallback
+  --band-height <px>        band fallback 高度，CSS px。默认：125
+  --wait-ms <ms>            截图前额外等待时间。默认：500
+  --help                    显示帮助
 `;
 
 function parseArgs(argv) {
@@ -44,8 +60,9 @@ function parseArgs(argv) {
     viewportHeight: undefined,
     scale: 2,
     compareMode: "design-bounds",
-    threshold: 0.1,
-    maxDiffRatio: 0.02,
+    preset: undefined,
+    threshold: undefined,
+    maxDiffRatio: undefined,
     background: "#f5f6f7",
     hideSelector: [".vc-switch", ".vc-panel", ".vconsole", "#__vconsole"],
     sectionsJson: undefined,
@@ -96,6 +113,9 @@ function parseArgs(argv) {
         break;
       case "--compare-mode":
         args.compareMode = take();
+        break;
+      case "--preset":
+        args.preset = take();
         break;
       case "--threshold":
         args.threshold = Number(take());
@@ -162,6 +182,43 @@ function assertRequired(args) {
   if (!["css", "pixel"].includes(args.sectionUnit)) {
     throw new Error("--section-unit must be one of: css, pixel");
   }
+  if (args.preset && !["strict", "practical", "both"].includes(args.preset)) {
+    throw new Error("--preset must be one of: strict, practical, both");
+  }
+}
+
+function resolveEffectivePreset(args) {
+  if (args.preset) return args.preset;
+  if (args.threshold != null || args.maxDiffRatio != null) return "practical";
+  return "both";
+}
+
+function resolveProfileConfigs(args) {
+  const effectivePreset = resolveEffectivePreset(args);
+  const hasLegacyOverrides = args.threshold != null || args.maxDiffRatio != null;
+
+  if (effectivePreset === "both" && hasLegacyOverrides) {
+    throw new Error("Legacy --threshold/--max-diff-ratio cannot be combined with --preset both; choose a single preset.");
+  }
+
+  const profileNames = effectivePreset === "both" ? ["strict", "practical"] : [effectivePreset];
+  const profiles = {};
+
+  for (const name of profileNames) {
+    const base = PROFILE_PRESETS[name];
+    profiles[name] = {
+      name,
+      label: base.label,
+      threshold: hasLegacyOverrides ? (args.threshold ?? base.threshold) : base.threshold,
+      maxDiffRatio: hasLegacyOverrides ? (args.maxDiffRatio ?? base.maxDiffRatio) : base.maxDiffRatio,
+    };
+  }
+
+  return {
+    preset: effectivePreset,
+    activeProfile: effectivePreset === "both" ? "practical" : effectivePreset,
+    profiles,
+  };
 }
 
 async function loadDependency(name, projectRoot) {
@@ -442,8 +499,7 @@ function buildBandSections(width, height, scale, bandHeightCss) {
   return sections;
 }
 
-function diffImages(pixelmatch, PNG, designImage, localImage, width, height, args) {
-  const background = parseHexColor(args.background);
+function diffImages(pixelmatch, PNG, designImage, localImage, width, height, threshold, background) {
   const designCanvas = compositeImage(PNG, designImage, width, height, background);
   const localCanvas = compositeImage(PNG, localImage, width, height, background);
   const diff = createCanvas(PNG, width, height, background);
@@ -454,7 +510,7 @@ function diffImages(pixelmatch, PNG, designImage, localImage, width, height, arg
     width,
     height,
     {
-      threshold: args.threshold,
+      threshold,
       includeAA: false,
     },
   );
@@ -466,6 +522,103 @@ function diffImages(pixelmatch, PNG, designImage, localImage, width, height, arg
     totalPixels,
     diffRatio: totalPixels === 0 ? 0 : diffPixels / totalPixels,
   };
+}
+
+function createProfileReport(profile, overall, sectionReports, diffPath) {
+  return {
+    name: profile.name,
+    label: profile.label,
+    threshold: profile.threshold,
+    maxDiffRatio: profile.maxDiffRatio,
+    diff: {
+      path: diffPath,
+      diffPixels: overall.diffPixels,
+      totalPixels: overall.totalPixels,
+      diffRatio: overall.diffRatio,
+      threshold: profile.threshold,
+      maxDiffRatio: profile.maxDiffRatio,
+      passed: overall.diffRatio <= profile.maxDiffRatio,
+    },
+    sections: sectionReports.map((section) => ({
+      ...section,
+      passed: section.diffRatio <= profile.maxDiffRatio,
+    })),
+    worstSections: [...sectionReports]
+      .sort((a, b) => b.diffRatio - a.diffRatio)
+      .slice(0, 10)
+      .map((section) => ({
+        name: section.name,
+        diffRatio: section.diffRatio,
+        diffPixels: section.diffPixels,
+        totalPixels: section.totalPixels,
+        diffPath: section.diffPath,
+      })),
+  };
+}
+
+function buildRuntimePaths(basePaths, profileName, presetMode, activeProfile) {
+  const profileDiffPath = presetMode === "both"
+    ? path.join(basePaths.screenshotsDir, `diff-${profileName}.png`)
+    : basePaths.diff;
+
+  return {
+    diffPath: profileDiffPath,
+    aliasDiffPath: profileName === activeProfile && profileDiffPath !== basePaths.diff ? basePaths.diff : undefined,
+    sectionsDir: presetMode === "both"
+      ? path.join(basePaths.sectionsRootDir, profileName)
+      : basePaths.sectionsRootDir,
+  };
+}
+
+async function evaluateProfile({
+  pixelmatch,
+  PNG,
+  design,
+  local,
+  width,
+  height,
+  sections,
+  background,
+  profile,
+  runtimePaths,
+}) {
+  const overall = diffImages(pixelmatch, PNG, design, local, width, height, profile.threshold, background);
+  const sectionReports = [];
+
+  await fs.mkdir(runtimePaths.sectionsDir, { recursive: true });
+
+  for (const section of sections) {
+    const designSection = cropImage(PNG, design, section, background);
+    const localSection = cropImage(PNG, local, section, background);
+    const sectionResult = diffImages(
+      pixelmatch,
+      PNG,
+      designSection,
+      localSection,
+      section.width,
+      section.height,
+      profile.threshold,
+      background,
+    );
+    const safeName = section.name.replace(/[^a-zA-Z0-9_-]+/g, "-").replace(/^-|-$/g, "") || "section";
+    const sectionDiffPath = path.join(runtimePaths.sectionsDir, `${safeName}-diff.png`);
+
+    await writePng(PNG, sectionDiffPath, sectionResult.diff);
+    sectionReports.push({
+      ...section,
+      diffPath: sectionDiffPath,
+      diffPixels: sectionResult.diffPixels,
+      totalPixels: sectionResult.totalPixels,
+      diffRatio: sectionResult.diffRatio,
+    });
+  }
+
+  await writePng(PNG, runtimePaths.diffPath, overall.diff);
+  if (runtimePaths.aliasDiffPath) {
+    await fs.copyFile(runtimePaths.diffPath, runtimePaths.aliasDiffPath);
+  }
+
+  return createProfileReport(profile, overall, sectionReports, runtimePaths.diffPath);
 }
 
 async function runPixelDiff(args, paths, projectRoot) {
@@ -482,10 +635,11 @@ async function runPixelDiff(args, paths, projectRoot) {
   const local = await readPng(PNG, paths.local);
   const background = parseHexColor(args.background);
   const { width, height } = getCompareSize(args, design, local);
-  const result = diffImages(pixelmatch, PNG, design, local, width, height, args);
+
   if (!args.sectionsJson) {
     args.sectionsJson = await findDefaultSectionsJson(paths);
   }
+
   let sections = [];
   let sectionsSource = args.sectionsJson || "";
   let sectionsError;
@@ -507,41 +661,34 @@ async function runPixelDiff(args, paths, projectRoot) {
       "No section diff input found. Generate summaries/sections.json with figma-build-contract.mjs, pass --sections-json, or explicitly rerun with --band-diff for diagnostic fallback.",
     );
   }
-  const sectionReports = [];
 
-  await fs.mkdir(paths.sectionsDir, { recursive: true });
+  const profileResolution = resolveProfileConfigs(args);
+  const profileReports = {};
 
-  for (const section of sections) {
-    const designSection = cropImage(PNG, design, section, background);
-    const localSection = cropImage(PNG, local, section, background);
-    const sectionResult = diffImages(
+  for (const [profileName, profile] of Object.entries(profileResolution.profiles)) {
+    const runtimePaths = buildRuntimePaths(paths, profileName, profileResolution.preset, profileResolution.activeProfile);
+    profileReports[profileName] = await evaluateProfile({
       pixelmatch,
       PNG,
-      designSection,
-      localSection,
-      section.width,
-      section.height,
-      args,
-    );
-    const safeName = section.name.replace(/[^a-zA-Z0-9_-]+/g, "-").replace(/^-|-$/g, "") || "section";
-    const sectionDiffPath = path.join(paths.sectionsDir, `${safeName}-diff.png`);
-
-    await writePng(PNG, sectionDiffPath, sectionResult.diff);
-    sectionReports.push({
-      ...section,
-      diffPath: sectionDiffPath,
-      diffPixels: sectionResult.diffPixels,
-      totalPixels: sectionResult.totalPixels,
-      diffRatio: sectionResult.diffRatio,
-      passed: sectionResult.diffRatio <= args.maxDiffRatio,
+      design,
+      local,
+      width,
+      height,
+      sections,
+      background,
+      profile,
+      runtimePaths,
     });
   }
 
+  const activeReport = profileReports[profileResolution.activeProfile];
   const report = {
     fileKey: args.fileKey,
     nodeId: args.nodeId,
     url: args.url,
     compareMode: args.compareMode,
+    preset: profileResolution.preset,
+    activeProfile: profileResolution.activeProfile,
     scale: args.scale,
     width,
     height,
@@ -556,30 +703,17 @@ async function runPixelDiff(args, paths, projectRoot) {
       height: local.height,
     },
     diff: {
+      ...activeReport.diff,
       path: paths.diff,
-      diffPixels: result.diffPixels,
-      totalPixels: result.totalPixels,
-      diffRatio: result.diffRatio,
-      threshold: args.threshold,
-      maxDiffRatio: args.maxDiffRatio,
-      passed: result.diffRatio <= args.maxDiffRatio,
     },
-    sections: sectionReports,
+    sections: activeReport.sections,
     sectionsSource,
-    worstSections: [...sectionReports]
-      .sort((a, b) => b.diffRatio - a.diffRatio)
-      .slice(0, 10)
-      .map((section) => ({
-        name: section.name,
-        diffRatio: section.diffRatio,
-        diffPixels: section.diffPixels,
-        totalPixels: section.totalPixels,
-        diffPath: section.diffPath,
-      })),
+    worstSections: activeReport.worstSections,
+    profiles: profileReports,
+    profileDefaults: PROFILE_PRESETS,
     generatedAt: new Date().toISOString(),
   };
 
-  await writePng(PNG, paths.diff, result.diff);
   await fs.writeFile(paths.report, `${JSON.stringify(report, null, 2)}\n`);
   await fs.writeFile(paths.summary, renderSummary(report));
 
@@ -593,32 +727,40 @@ function renderSummary(report) {
     `- fileKey: \`${report.fileKey}\``,
     `- nodeId: \`${report.nodeId}\``,
     `- compareMode: \`${report.compareMode}\``,
+    `- preset: \`${report.preset}\``,
+    `- activeProfile: \`${report.activeProfile}\``,
     `- scale: \`${report.scale}\``,
     `- size: \`${report.width}x${report.height}\``,
-    `- diffPixels: \`${report.diff.diffPixels}\``,
-    `- totalPixels: \`${report.diff.totalPixels}\``,
-    `- diffRatio: \`${(report.diff.diffRatio * 100).toFixed(4)}%\``,
-    `- threshold: \`${report.diff.threshold}\``,
-    `- maxDiffRatio: \`${report.diff.maxDiffRatio}\``,
-    `- passed: \`${report.diff.passed}\``,
     `- sectionsSource: \`${report.sectionsSource || "none"}\``,
     "",
     "## Artifacts",
     "",
     `- design: \`${report.design.path}\``,
     `- local: \`${report.local.path}\``,
-    `- diff: \`${report.diff.path}\``,
+    `- diff(active alias): \`${report.diff.path}\``,
   ];
 
-  if (report.sections.length > 0) {
-    lines.push("", "## Worst Sections", "");
-    for (const section of report.worstSections || []) {
-      lines.push(`- ${section.name}: ${(section.diffRatio * 100).toFixed(4)}% (${section.diffPixels}/${section.totalPixels}) -> \`${section.diffPath}\``);
-    }
+  for (const profileName of Object.keys(report.profiles)) {
+    const profile = report.profiles[profileName];
+    lines.push(
+      "",
+      `## Profile: ${profile.name}`,
+      "",
+      `- label: \`${profile.label}\``,
+      `- threshold: \`${profile.threshold}\``,
+      `- maxDiffRatio: \`${profile.maxDiffRatio}\``,
+      `- diffPixels: \`${profile.diff.diffPixels}\``,
+      `- totalPixels: \`${profile.diff.totalPixels}\``,
+      `- diffRatio: \`${(profile.diff.diffRatio * 100).toFixed(4)}%\``,
+      `- passed: \`${profile.diff.passed}\``,
+      `- diff: \`${profile.diff.path}\``,
+    );
 
-    lines.push("", "## Sections", "");
-    for (const section of [...report.sections].sort((a, b) => b.diffRatio - a.diffRatio)) {
-      lines.push(`- ${section.name}: ${(section.diffRatio * 100).toFixed(4)}% (${section.diffPixels}/${section.totalPixels}) -> \`${section.diffPath}\``);
+    if (profile.worstSections.length > 0) {
+      lines.push("", "### Worst Sections", "");
+      for (const section of profile.worstSections) {
+        lines.push(`- ${section.name}: ${(section.diffRatio * 100).toFixed(4)}% (${section.diffPixels}/${section.totalPixels}) -> \`${section.diffPath}\``);
+      }
     }
   }
 
@@ -642,10 +784,12 @@ async function main() {
   const screenshotsDir = path.join(baseDir, "screenshots");
   const summariesDir = path.join(baseDir, "summaries");
   const paths = {
+    baseDir,
+    screenshotsDir,
     design: path.join(screenshotsDir, "design.png"),
     local: path.join(screenshotsDir, "local.png"),
     diff: path.join(screenshotsDir, "diff.png"),
-    sectionsDir: path.join(screenshotsDir, "sections"),
+    sectionsRootDir: path.join(screenshotsDir, "sections"),
     report: path.join(summariesDir, "pixel-diff-report.json"),
     summary: path.join(summariesDir, "pixel-diff-summary.md"),
   };
@@ -665,18 +809,40 @@ async function main() {
     export: {
       apiUrl: exportInfo.apiUrl,
     },
-    artifacts: paths,
+    preset: report.preset,
+    activeProfile: report.activeProfile,
+    artifacts: {
+      design: paths.design,
+      local: paths.local,
+      diff: paths.diff,
+      report: paths.report,
+      summary: paths.summary,
+    },
     diff: report.diff,
+    profiles: Object.fromEntries(
+      Object.entries(report.profiles).map(([name, profile]) => [name, profile.diff]),
+    ),
   }, null, 2));
 }
 
-main().catch((error) => {
-  console.error(JSON.stringify({
-    ok: false,
-    error: error.message,
-    hint: error.message.includes("FIGMA_TOKEN")
-      ? "Set FIGMA_TOKEN with read access to the Figma file, then rerun the script."
-      : undefined,
-  }, null, 2));
-  process.exitCode = 1;
-});
+if (process.argv[1] && path.resolve(process.argv[1]) === __filename) {
+  main().catch((error) => {
+    console.error(JSON.stringify({
+      ok: false,
+      error: error.message,
+      hint: error.message.includes("FIGMA_TOKEN")
+        ? "Set FIGMA_TOKEN with read access to the Figma file, then rerun the script."
+        : undefined,
+    }, null, 2));
+    process.exitCode = 1;
+  });
+}
+
+export {
+  PROFILE_PRESETS,
+  createProfileReport,
+  diffImages,
+  normalizeSection,
+  renderSummary,
+  resolveProfileConfigs,
+};

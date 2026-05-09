@@ -1,0 +1,7 @@
+interface:
+  display_name: "Figma Hifi Frontend"
+  short_description: "高保真 Figma 稿转前端与视觉验收工作流"
+  default_prompt: "Use $figma-hifi-frontend to turn a Figma node into high-fidelity frontend code with contract generation, asset decisions, and pixel-diff evidence."
+
+policy:
+  allow_implicit_invocation: true
