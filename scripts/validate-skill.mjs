@@ -11,8 +11,8 @@ const rootDir = path.resolve(path.dirname(new URL(import.meta.url).pathname), ".
 const ALLOWED_FRONTMATTER_KEYS = new Set(["name", "description", "license", "allowed-tools", "metadata"]);
 const MAX_SKILL_NAME_LENGTH = 64;
 const REQUIRED_HELP_TERMS = [
-  { file: "SKILL.md", terms: ["strict", "practical", "sections.json", "band-diff"] },
-  { file: "reference-pixel-diff.md", terms: ["--preset", "strict", "practical", "band-diff", "sectionsSource"] },
+  { file: "SKILL.md", terms: ["strict", "practical", "sections.json", "band-diff", "docs/hifi/figma", "Hard Gates"] },
+  { file: "reference-pixel-diff.md", terms: ["--preset", "strict", "practical", "band-diff", "sectionsSource", "docs/hifi/figma"] },
 ];
 
 async function readText(relativePath) {
@@ -208,12 +208,12 @@ async function validateTerminology() {
   }
 
   const { stdout: pixelDiffHelp } = await execFileAsync("node", ["scripts/figma-pixel-diff.mjs", "--help"], { cwd: rootDir });
-  for (const term of ["--preset", "strict", "practical", "--band-diff", "--sections-json"]) {
+  for (const term of ["--preset", "strict", "practical", "--band-diff", "--sections-json", "docs/hifi/figma"]) {
     assert.ok(pixelDiffHelp.includes(term), `figma-pixel-diff help is missing term: ${term}`);
   }
 
   const { stdout: contractHelp } = await execFileAsync("node", ["scripts/figma-build-contract.mjs", "--help"], { cwd: rootDir });
-  for (const term of ["提取后的节点 JSON", "Figma REST JSON", "MCP metadata XML"]) {
+  for (const term of ["提取后的节点 JSON", "Figma REST JSON", "MCP metadata XML", "docs/hifi/figma"]) {
     assert.ok(contractHelp.includes(term), `figma-build-contract help is missing term: ${term}`);
   }
 }

@@ -54,6 +54,23 @@ description: 将 Figma 设计稿高保真还原为目标项目当前技术栈的
 
 ## Required Artifacts
 
+Figma 产物默认落点：
+
+```text
+docs/hifi/figma/<fileKey>/node-<node-id>/
+```
+
+示例：`docs/hifi/figma/F73HLQHKaCfL0QRYdJSev0/node-50-929/`。
+
+`node-id` 目录必须用 `node-50-929` 形式；`50:929`、`50-929` 输入都归一到同一路径，禁止同时生成 `50_929` / `50-929` / `node-50_929`。
+
+raw 层至少应落盘：
+
+- `raw/get_metadata.xml`
+- `raw/get_design_context.tsx`
+- `raw/get_screenshot.json`
+- `raw/variables.json`，如已读取变量
+
 开始编码前至少应具备：
 
 - `summaries/layout-contract.md`
@@ -73,6 +90,32 @@ description: 将 Figma 设计稿高保真还原为目标项目当前技术栈的
 - 没有 REST 导出的 `design.png`，不能宣称完成视觉对比。
 - `--band-diff` 仅用于诊断，不能作为最终验收依据。
 
+## Hard Gates
+
+以下门禁是阻塞规则，不是建议。任一门禁失败时必须停止当前阶段，先报告缺失产物和下一步修复动作，不能继续实现或宣称完成。
+
+### Fetch Gate
+
+- 缓存根默认是当前项目内 `docs/hifi/figma/`，除非用户明确指定 `FIGMA_HIFI_CACHE_ROOT` 或 `--cache-root`。
+- 每个 Figma 节点必须使用 `docs/hifi/figma/<fileKey>/node-<node-id>/` 作为单一产物目录。
+- `get_design_context` 的直出代码必须保存为 `raw/get_design_context.tsx`。
+- `get_design_context` 直出代码只能作为设计表达合同输入；最终实现必须改写为目标项目技术栈和样式体系，不得直接复制 Tailwind 或引入项目外框架。
+- 若 raw 数据无法获取或无法落盘，停止，不进入合同生成。
+
+### Contract Gate
+
+- 进入任何项目代码实现前，必须存在 `summaries/layout-contract.md`。
+- `summaries/sections.json` 必须存在且非空；空数组等同失败。
+- `summaries/assets-index.json` 必须存在；复杂静态视觉没有识别策略时，先补合同或资源索引。
+- `layout-contract.md` 若大量关键尺寸、分区或资源仍为 `TBD`，停止补 raw/metadata，不直接编码。
+
+### Diff Gate
+
+- 宣称“1:1 / 高保真完成 / 像素级完成”前，必须有 `screenshots/design.png`、`screenshots/local.png`、`summaries/pixel-diff-report.json`。
+- `pixel-diff-report.json.sections` 必须非空；没有 section diff 时只能说“诊断完成”，不能说“高保真完成”。
+- `practical` 未通过或报告 `passed=false` 时，只能说明未通过的 section、原因和下一步，不得包装为完成。
+- `--band-diff` 的结果只能辅助诊断，不能作为最终验收证据。
+
 ## Workflow
 
 ### 1. Fetch
@@ -80,6 +123,7 @@ description: 将 Figma 设计稿高保真还原为目标项目当前技术栈的
 - 先判断是否强制刷新缓存。
 - 未强制刷新时优先读取已有缓存。
 - 缓存缺失时，再调用 MCP / REST 获取数据。
+- MCP `get_metadata`、`get_design_context`、`get_screenshot` 的原始产物必须保存到 `raw/`。
 - 需要真实视觉基线时，必须拿到可落盘 `design.png`。
 
 缓存结构、命令参数和目录示例见：

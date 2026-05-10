@@ -20,20 +20,28 @@
 node scripts/figma-build-contract.mjs \
   --file-key F73HLQHKaCfL0QRYdJSev0 \
   --node-id 50:929 \
-  --metadata ~/.cache/figma-mcp/F73HLQHKaCfL0QRYdJSev0/50_929/raw/get_metadata.xml \
-  --cache-root ~/.cache/figma-mcp \
+  --metadata docs/hifi/figma/F73HLQHKaCfL0QRYdJSev0/node-50-929/raw/get_metadata.xml \
+  --cache-root docs/hifi/figma \
+  --out-dir docs/hifi/figma/F73HLQHKaCfL0QRYdJSev0/node-50-929 \
   --figma-url "https://www.figma.com/design/..." \
   --target-name "估价结果"
 ```
 
 参数真值以 `node scripts/figma-build-contract.mjs --help` 为准。
 
+默认缓存根是 `docs/hifi/figma`。如需覆盖，只能使用 `--cache-root` 或 `FIGMA_HIFI_CACHE_ROOT`，但仍应保持 `<fileKey>/node-<node-id>/` 结构。
+
 ## 输出契约
 
 输出目录：
 
 ```text
-<cache>/<fileKey>/<nodeId>/
+docs/hifi/figma/<fileKey>/node-<node-id>/
+  raw/
+    get_metadata.xml
+    get_design_context.tsx
+    get_screenshot.json
+    variables.json
   summaries/
     node-index.json
     sections.json
@@ -45,10 +53,11 @@ node scripts/figma-build-contract.mjs \
 字段约束：
 
 - `node-index.json`：扁平节点索引
-- `sections.json`：必须非空，坐标单位为 CSS px
+- `sections.json`：必须存在且非空，坐标单位为 CSS px
 - `assets-index.json`：静态资源策略初判
 - `layout-contract.md`：供实现阶段直接消费
 - `manifest-patch.json`：写回任务 manifest 的建议字段
+- `raw/get_design_context.tsx`：Figma MCP 直出结构，只能作为设计表达合同输入，不得直接复制到项目实现
 
 ## 失败条件
 
@@ -62,5 +71,6 @@ node scripts/figma-build-contract.mjs \
 ## 使用建议
 
 - `layout-contract.md` 出现大量 `TBD` 时，先补 metadata，不直接编码
+- `sections.json` 缺失或为空时，必须停止，不能进入实现阶段
 - `assets-index.json` 是策略初判，不等于最终实现
 - 合同层成功是进入编码阶段的前提，不是可选步骤

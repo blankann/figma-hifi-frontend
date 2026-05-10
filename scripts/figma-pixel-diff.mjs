@@ -35,7 +35,7 @@ const usage = `用法：
   FIGMA_TOKEN               可读取该 Figma 文件的 personal access token
 
 选项：
-  --cache-root <path>       默认：~/.cache/figma-mcp
+  --cache-root <path>       默认：$FIGMA_HIFI_CACHE_ROOT；否则 docs/hifi/figma
   --viewport-width <px>     默认：375
   --viewport-height <px>    CSS px。默认：design image height / scale，再回退 812
   --scale <n>               Figma 导出倍率和浏览器 deviceScaleFactor。默认：2
@@ -55,7 +55,7 @@ const usage = `用法：
 
 function parseArgs(argv) {
   const args = {
-    cacheRoot: "~/.cache/figma-mcp",
+    cacheRoot: resolveDefaultCacheRoot(),
     viewportWidth: 375,
     viewportHeight: undefined,
     scale: 2,
@@ -153,11 +153,20 @@ function parseArgs(argv) {
 }
 
 function normalizeNodeId(nodeId) {
-  return String(nodeId).replace("-", ":");
+  return String(nodeId).trim().replace(/-/g, ":");
+}
+
+function normalizeNodeIdForPath(nodeId) {
+  return `node-${normalizeNodeId(nodeId).replace(/:/g, "-")}`;
 }
 
 function nodeIdForPath(nodeId) {
-  return normalizeNodeId(nodeId).replace(":", "_");
+  return normalizeNodeIdForPath(nodeId);
+}
+
+function resolveDefaultCacheRoot() {
+  if (process.env.FIGMA_HIFI_CACHE_ROOT) return process.env.FIGMA_HIFI_CACHE_ROOT;
+  return "docs/hifi/figma";
 }
 
 function expandHome(inputPath) {
@@ -842,6 +851,7 @@ export {
   PROFILE_PRESETS,
   createProfileReport,
   diffImages,
+  normalizeNodeIdForPath,
   normalizeSection,
   renderSummary,
   resolveProfileConfigs,

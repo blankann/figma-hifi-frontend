@@ -16,8 +16,8 @@
 node scripts/figma-pixel-diff.mjs \
   --file-key F73HLQHKaCfL0QRYdJSev0 \
   --node-id 50:929 \
-  --url http://localhost:3000/v2/valuationResult \
-  --cache-root ~/.cache/figma-mcp \
+  --url "http://localhost:3000/v2/priceToolResult?clue_id=demo&mock=1" \
+  --cache-root docs/hifi/figma \
   --viewport-width 375 \
   --compare-mode design-bounds \
   --preset both \
@@ -34,6 +34,7 @@ node scripts/figma-pixel-diff.mjs \
 - `--file-key`
 - `--node-id`
 - `--url`
+- `docs/hifi/figma/<fileKey>/node-<node-id>/summaries/sections.json` 存在且非空，或显式传 `--sections-json`
 
 分区 diff：
 
@@ -81,7 +82,7 @@ node scripts/figma-pixel-diff.mjs \
 ## 输出产物
 
 ```text
-<cache>/<fileKey>/<nodeId>/
+docs/hifi/figma/<fileKey>/node-<node-id>/
   screenshots/
     design.png
     local.png
@@ -107,6 +108,8 @@ node scripts/figma-pixel-diff.mjs \
 
 - 有 section diff 才能做正式验收
 - `pixel-diff-report.json.sections` 为空时，不能宣称通过
+- 缺少 `screenshots/design.png` 或 `screenshots/local.png` 时，不能宣称完成视觉验收
+- 顶层 `diff.passed=false` 或 active profile 未通过时，最终回复只能说“诊断完成”或“未通过验收”，不能说“高保真完成”
 - `--band-diff` 只允许做诊断性 fallback
 
 诊断规则：

@@ -14,16 +14,16 @@ const usage = `用法：
   FIGMA_TOKEN             可读取该 Figma 文件的 personal access token
 
 选项：
-  --cache-root <path>     默认：~/.cache/figma-mcp
-  --assets-index <path>   默认：<cache>/<fileKey>/<nodeId>/summaries/assets-index.json
-  --out-dir <path>        默认：<cache>/<fileKey>/<nodeId>/assets
+  --cache-root <path>     默认：$FIGMA_HIFI_CACHE_ROOT；否则 docs/hifi/figma
+  --assets-index <path>   默认：<cache>/<fileKey>/node-<node-id>/summaries/assets-index.json
+  --out-dir <path>        默认：<cache>/<fileKey>/node-<node-id>/assets
   --scale <n>             PNG 导出倍率。默认：2
   --help                  显示帮助
 `;
 
 function parseArgs(argv) {
   const args = {
-    cacheRoot: "~/.cache/figma-mcp",
+    cacheRoot: resolveDefaultCacheRoot(),
     scale: 2,
   };
 
@@ -83,11 +83,20 @@ function assertRequired(args) {
 }
 
 function normalizeNodeId(nodeId) {
-  return String(nodeId).replace("-", ":");
+  return String(nodeId).trim().replace(/-/g, ":");
+}
+
+function normalizeNodeIdForPath(nodeId) {
+  return `node-${normalizeNodeId(nodeId).replace(/:/g, "-")}`;
 }
 
 function nodeIdForPath(nodeId) {
-  return normalizeNodeId(nodeId).replace(":", "_");
+  return normalizeNodeIdForPath(nodeId);
+}
+
+function resolveDefaultCacheRoot() {
+  if (process.env.FIGMA_HIFI_CACHE_ROOT) return process.env.FIGMA_HIFI_CACHE_ROOT;
+  return "docs/hifi/figma";
 }
 
 function expandHome(inputPath) {
@@ -273,5 +282,6 @@ export {
   assetFormat,
   buildExportPlan,
   defaultFilename,
+  normalizeNodeIdForPath,
   resolveAssetPath,
 };

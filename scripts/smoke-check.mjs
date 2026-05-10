@@ -8,11 +8,16 @@ import {
   buildAssets,
   chooseSections,
   loadMetadata,
+  normalizeNodeIdForPath as normalizeContractNodeIdForPath,
   pickTargetNode,
 } from "./figma-build-contract.mjs";
-import { buildExportPlan } from "./figma-export-assets.mjs";
+import {
+  buildExportPlan,
+  normalizeNodeIdForPath as normalizeAssetNodeIdForPath,
+} from "./figma-export-assets.mjs";
 import {
   createProfileReport,
+  normalizeNodeIdForPath as normalizeDiffNodeIdForPath,
   renderSummary,
   resolveProfileConfigs,
 } from "./figma-pixel-diff.mjs";
@@ -101,11 +106,23 @@ function checkProfileSemantics() {
   assert.match(summary, /Profile: practical/);
 }
 
+function checkNodeIdPathNormalization() {
+  for (const normalize of [
+    normalizeContractNodeIdForPath,
+    normalizeAssetNodeIdForPath,
+    normalizeDiffNodeIdForPath,
+  ]) {
+    assert.equal(normalize("50:929"), "node-50-929");
+    assert.equal(normalize("50-929"), "node-50-929");
+  }
+}
+
 async function main() {
   const contract = await checkContractFixture();
   await checkContractFailureFixture();
   const exportPlan = await checkExportPlanFixture();
   checkProfileSemantics();
+  checkNodeIdPathNormalization();
 
   console.log(JSON.stringify({
     ok: true,
@@ -114,6 +131,7 @@ async function main() {
       "contract failure fixture rejects missing bounds",
       `export plan fixture kept ${exportPlan.join(", ")}`,
       "strict/practical profile semantics verified",
+      "node id path normalization verified",
     ],
   }, null, 2));
 }

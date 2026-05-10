@@ -14,7 +14,7 @@ const usage = `用法：
   --metadata <path>       元数据文件。支持：提取后的节点 JSON、Figma REST JSON、MCP metadata XML
 
 选项：
-  --cache-root <path>     默认：~/.cache/figma-mcp
+  --cache-root <path>     默认：$FIGMA_HIFI_CACHE_ROOT；否则 docs/hifi/figma
   --out-dir <path>        覆盖输出节点目录
   --figma-url <url>       原始 Figma 链接
   --target-name <name>    目标节点名称兜底值
@@ -25,7 +25,7 @@ const usage = `用法：
 
 function parseArgs(argv) {
   const args = {
-    cacheRoot: "~/.cache/figma-mcp",
+    cacheRoot: resolveDefaultCacheRoot(),
   };
 
   for (let i = 0; i < argv.length; i += 1) {
@@ -93,11 +93,20 @@ function assertRequired(args) {
 }
 
 function normalizeNodeId(nodeId) {
-  return String(nodeId).replace("-", ":");
+  return String(nodeId).trim().replace(/-/g, ":");
+}
+
+function normalizeNodeIdForPath(nodeId) {
+  return `node-${normalizeNodeId(nodeId).replace(/:/g, "-")}`;
 }
 
 function nodeIdForPath(nodeId) {
-  return normalizeNodeId(nodeId).replace(":", "_");
+  return normalizeNodeIdForPath(nodeId);
+}
+
+function resolveDefaultCacheRoot() {
+  if (process.env.FIGMA_HIFI_CACHE_ROOT) return process.env.FIGMA_HIFI_CACHE_ROOT;
+  return "docs/hifi/figma";
 }
 
 function expandHome(inputPath) {
@@ -668,5 +677,6 @@ export {
   chooseSections,
   detectMetadataSource,
   loadMetadata,
+  normalizeNodeIdForPath,
   pickTargetNode,
 };

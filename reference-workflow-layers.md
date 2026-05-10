@@ -9,6 +9,55 @@
 - 输入输出契约：看本文件和对应 reference
 - 自动化验证：优先 `npm run validate`，只跑 smoke 时用 `npm run smoke`
 
+## 缓存与产物目录
+
+Figma 产物默认放在当前项目内：
+
+```text
+docs/hifi/figma/<fileKey>/node-<node-id>/
+```
+
+示例：
+
+```text
+docs/hifi/figma/F73HLQHKaCfL0QRYdJSev0/node-50-929/
+```
+
+目录必须按需创建。`node-id` 路径名统一用 `node-50-929` 形式；输入 `50:929` 或 `50-929` 都必须落到同一目录，禁止生成 `50_929`。
+
+标准结构：
+
+```text
+docs/hifi/figma/
+  F73HLQHKaCfL0QRYdJSev0/
+    node-50-929/
+      raw/
+        get_metadata.xml
+        get_design_context.tsx
+        get_screenshot.json
+        variables.json
+      summaries/
+        node-index.json
+        sections.json
+        assets-index.json
+        layout-contract.md
+        manifest-patch.json
+        pixel-diff-report.json
+        pixel-diff-summary.md
+      assets/
+        images/
+        svg/
+      screenshots/
+        design.png
+        local.png
+        diff.png
+        diff-strict.png
+        diff-practical.png
+        sections/
+```
+
+执行期间这些文件必须落盘，不能只保存在会话、临时 URL 或用户级缓存。是否提交大图、diff 图、导出资源由项目 PR 策略决定；但合同文件和验收摘要应优先保留在项目内，方便复盘。
+
 ## 1. 数据获取层
 
 落点：
