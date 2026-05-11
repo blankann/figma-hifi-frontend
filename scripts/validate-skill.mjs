@@ -11,8 +11,48 @@ const rootDir = path.resolve(path.dirname(new URL(import.meta.url).pathname), ".
 const ALLOWED_FRONTMATTER_KEYS = new Set(["name", "description", "license", "allowed-tools", "metadata"]);
 const MAX_SKILL_NAME_LENGTH = 64;
 const REQUIRED_HELP_TERMS = [
-  { file: "SKILL.md", terms: ["strict", "practical", "sections.json", "band-diff", "docs/hifi/figma", "Hard Gates"] },
-  { file: "reference-pixel-diff.md", terms: ["--preset", "strict", "practical", "band-diff", "sectionsSource", "docs/hifi/figma"] },
+  {
+    file: "SKILL.md",
+    terms: [
+      "strict",
+      "practical",
+      "sections.json",
+      "band-diff",
+      "docs/hifi/figma",
+      "Hard Gates",
+      "整页截图作为最终页面主体",
+      "MCP `get_design_context` 的原始直出代码",
+      "没有 JSX/HTML/CSS 结构",
+      "禁止把可 DOM 表达",
+      "hash 完全相同",
+    ],
+  },
+  {
+    file: "reference-pixel-diff.md",
+    terms: [
+      "--preset",
+      "strict",
+      "practical",
+      "band-diff",
+      "sectionsSource",
+      "docs/hifi/figma",
+      "浏览器截图",
+      "hash 完全相同",
+      "失败报告模板",
+    ],
+  },
+  {
+    file: "reference-implementation-strategy.md",
+    terms: [
+      "full-frame-image",
+      "该分类为禁止项",
+      "每个主要 section 都必须标注",
+      "translated-dom",
+      "bitmap-asset",
+      "可 DOM 表达的 UI 必须转译为 DOM",
+      "完整页面 PNG",
+    ],
+  },
 ];
 
 async function readText(relativePath) {

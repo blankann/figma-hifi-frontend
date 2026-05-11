@@ -35,6 +35,7 @@ node scripts/figma-pixel-diff.mjs \
 - `--node-id`
 - `--url`
 - `docs/hifi/figma/<fileKey>/node-<node-id>/summaries/sections.json` 存在且非空，或显式传 `--sections-json`
+- `screenshots/local.png` 必须由脚本访问 `--url` 后通过浏览器截图生成
 
 分区 diff：
 
@@ -109,6 +110,8 @@ docs/hifi/figma/<fileKey>/node-<node-id>/
 - 有 section diff 才能做正式验收
 - `pixel-diff-report.json.sections` 为空时，不能宣称通过
 - 缺少 `screenshots/design.png` 或 `screenshots/local.png` 时，不能宣称完成视觉验收
+- `local.png` 必须来自目标 URL 的浏览器截图；不能复制 `design.png`、Figma 导出图或其他静态基线图代替
+- 如果 `design.png` 与 `local.png` hash 完全相同，且报告没有明确证明 `local.png` 来自浏览器截图，则验收失败
 - 顶层 `diff.passed=false` 或 active profile 未通过时，最终回复只能说“诊断完成”或“未通过验收”，不能说“高保真完成”
 - `--band-diff` 只允许做诊断性 fallback
 
@@ -125,9 +128,24 @@ docs/hifi/figma/<fileKey>/node-<node-id>/
 - 缺少 Playwright
 - `sections.json` 缺失或为空
 - 在 `--preset both` 下又传 legacy 阈值覆盖
+- 本地 URL 无法打开或页面未稳定渲染
+- `local.png` 不是浏览器截图
+- `design.png` 与 `local.png` hash 相同且无截图来源证据
+
+## 失败报告模板
+
+遇到阻塞时，最终回复只报告事实和下一步，不宣称完成：
+
+```text
+视觉验收未完成：
+- 阻塞原因：缺少 Playwright / URL 不可访问 / sections.json 为空 / local.png 非浏览器截图
+- 已有证据：列出已生成的 design.png、sections.json、raw 文件
+- 下一步：安装或修复浏览器截图环境，重新生成 local.png，再运行 section diff
+```
 
 ## 验收建议
 
 - 报告结果时同时说明 `strict` 与 `practical`
 - 修复顺序看 `worstSections`
 - 先解决结构偏移，再处理细节视觉差异
+- 如发现 `design.png` 与 `local.png` 完全一致，先核对截图来源，再判断是否存在整页图片化实现

@@ -412,15 +412,12 @@ function chooseSections(target) {
 function classifyAsset(node) {
   const name = `${node.name || ""} ${node.type || ""}`.toLowerCase();
   const hasImageRef = Boolean(node.style?.imageRef);
-  const hasEffects = Array.isArray(node.style?.effects) && node.style.effects.length > 0;
-  const hasComplexFill = Array.isArray(node.style?.fills)
-    && node.style.fills.some((fill) => /IMAGE|GRADIENT/i.test(fill?.type || ""));
+  const hasImageFill = Array.isArray(node.style?.fills)
+    && node.style.fills.some((fill) => /IMAGE/i.test(fill?.type || ""));
 
-  if (hasImageRef || hasComplexFill) return "image-asset";
-  if (/image|png|jpg|jpeg|webp|bitmap|avatar|photo|picture|车辆|车图|头像|图片|照片|截图|截屏/.test(name)) return "image-asset";
+  if (hasImageRef || hasImageFill) return "bitmap-asset";
+  if (/image|png|jpg|jpeg|webp|bitmap|avatar|photo|picture|车辆|车图|头像|图片|照片|截图|截屏/.test(name)) return "bitmap-asset";
   if (/vector|svg|icon|line\/|union|boolean|star|logo|arrow|chevron|back|返回|图标/.test(name)) return "svg-asset";
-  if (/chart|trend|graph|营销|banner|advantage|优势|服务|保障|保险|模式|卖个人|买家放心|成交趋势|价格趋势|估值趋势|曲线|插画|illustration|gradient/.test(name)) return "image-asset";
-  if (hasEffects && node.childCount > 4) return "image-asset";
 
   return undefined;
 }
@@ -450,10 +447,11 @@ function buildAssets(flatNodes) {
         type: strategy,
         targetFile: `assets/${slugifyAssetName(node.name, node.id, strategy)}`,
         usage: inferAssetUsage(node),
-        handling: strategy === "svg-asset" ? "Export as SVG or inline SVG" : "Export as local image asset if static",
+        handling: strategy === "svg-asset" ? "Export as SVG or inline SVG" : "Export only when source is bitmap/photo/imageRef/business image",
         codeReference: "",
-        suggestedUse: strategy === "svg-asset" ? "Use as icon/SVG with fixed box matching Figma bounds" : "Use img/background with exact Figma bounds; keep adjacent text as DOM only when it must be editable",
+        suggestedUse: strategy === "svg-asset" ? "Use as icon/SVG with fixed box matching Figma bounds" : "Use img/background only for the original bitmap source; translate adjacent UI/text as DOM",
         bounds: node.bounds,
+        sourceReason: strategy === "bitmap-asset" ? (node.style?.imageRef ? "imageRef" : "bitmap/photo/image naming or image fill") : "vector/icon naming",
         notes: node.style?.imageRef ? `imageRef=${node.style.imageRef}` : "",
       };
     })
@@ -464,10 +462,8 @@ function inferAssetUsage(node) {
   const name = `${node.name || ""}`.toLowerCase();
   if (/车|vehicle|car/.test(name)) return "vehicle/record imagery";
   if (/头像|avatar/.test(name)) return "avatar";
-  if (/chart|trend|graph|趋势|曲线/.test(name)) return "static chart";
-  if (/营销|banner|保障|服务|优势|模式|放心/.test(name)) return "marketing/static visual block";
   if (/icon|图标|arrow|chevron|back|返回/.test(name)) return "icon";
-  return "static visual asset";
+  return "bitmap or vector source asset";
 }
 
 function formatBounds(bounds) {

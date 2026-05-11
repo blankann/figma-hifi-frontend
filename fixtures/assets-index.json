@@ -2,7 +2,7 @@
   {
     "figmaNode": "Vehicle Photo",
     "nodeId": "1:21",
-    "type": "image-asset",
+    "type": "bitmap-asset",
     "targetFile": "assets/vehicle-photo.png"
   },
   {

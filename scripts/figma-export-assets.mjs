@@ -157,9 +157,9 @@ function buildExportPlan(assets, outDir) {
     throw new Error("assets-index has no exportable assets");
   }
 
-  const typedAssets = assets.filter((asset) => ["image-asset", "svg-asset"].includes(asset?.type));
+  const typedAssets = assets.filter((asset) => ["bitmap-asset", "svg-asset"].includes(asset?.type));
   if (typedAssets.length === 0) {
-    throw new Error("assets-index contains no image-asset/svg-asset entries");
+    throw new Error("assets-index contains no bitmap-asset/svg-asset entries");
   }
 
   const missingNodeIds = typedAssets.filter((asset) => !asset?.nodeId);

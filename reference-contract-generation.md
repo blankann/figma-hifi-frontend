@@ -54,10 +54,10 @@ docs/hifi/figma/<fileKey>/node-<node-id>/
 
 - `node-index.json`：扁平节点索引
 - `sections.json`：必须存在且非空，坐标单位为 CSS px
-- `assets-index.json`：静态资源策略初判
+- `assets-index.json`：真实位图、照片、业务图片和 SVG 资源策略初判
 - `layout-contract.md`：供实现阶段直接消费
 - `manifest-patch.json`：写回任务 manifest 的建议字段
-- `raw/get_design_context.tsx`：Figma MCP 直出结构，只能作为设计表达合同输入，不得直接复制到项目实现
+- `raw/get_design_context.tsx`：Figma MCP 直出 HTML/DOM/CSS 结构，是设计合同和项目技术栈转译的输入；不得用摘要替代，也不得直接复制到项目实现
 
 ## 失败条件
 
